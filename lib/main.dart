@@ -134,7 +134,6 @@ class _CodeRunnerScreenState extends State<CodeRunnerScreen> {
       return;
     }
 
-    // التحقق السليم من كود print
     final printRegex = RegExp(r"^print\s*\(\s*(['" r'"])(.*?)\1\s*\)\s*;?$');
     if (printRegex.hasMatch(code)) {
       final match = printRegex.firstMatch(code);
@@ -145,7 +144,6 @@ class _CodeRunnerScreenState extends State<CodeRunnerScreen> {
         _isSuccess = true;
       });
 
-      // إعطاء نقاط مرة واحدة فقط لنفس الكود غير الفارغ
       if (!_executedCodes.contains(code) && printedText.isNotEmpty) {
         _executedCodes.add(code);
         _addScore(10);
@@ -160,7 +158,8 @@ class _CodeRunnerScreenState extends State<CodeRunnerScreen> {
     }
   }
 
-  @overrideWidget build(BuildContext context) {
+  @override
+  Widget build(BuildContext context) {
     bool isAr = widget.language == 'ar';
 
     return Directionality(
