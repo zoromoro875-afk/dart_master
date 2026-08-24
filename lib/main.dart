@@ -128,8 +128,8 @@ class _HomeScreenState extends State<HomeScreen> {
       id: 'lesson_2',
       titleAr: '2. المتغيرات (Variables)',
       titleEn: '2. Variables',
-      contentAr: 'تُستخدم var لإنشاء متغير يخزن البيانات كالأسماء أو الأرقام.',
-      contentEn: 'Use var to create a variable that stores data like names or numbers.',
+      contentAr: 'تُستخدم var لإنشاء متغير يخزن البيانات كالأسماء أو الأرقام.\nمثال: var name = "Mustapha";',
+      contentEn: 'Use var to create a variable that stores data like names or numbers.\nExample: var name = "Mustapha";',
       initialCode: 'var name = "Mustapha";\nprint(name);',
       expectedKeyword: 'Mustapha',
     ),
@@ -137,8 +137,8 @@ class _HomeScreenState extends State<HomeScreen> {
       id: 'lesson_3',
       titleAr: '3. الأرقام والحساب',
       titleEn: '3. Numbers & Math',
-      contentAr: 'يمكنك إجراء العمليات الحسابية المباشرة داخل الدالة print.',
-      contentEn: 'You can perform mathematical operations directly inside print.',
+      contentAr: 'يمكنك إسناد الأرقام وإجراء العمليات الحسابية.\nمثال: var a = 10; var b = 20;',
+      contentEn: 'Assign numbers and run math operations.\nExample: var a = 10; var b = 20;',
       initialCode: 'var a = 10;\nvar b = 20;\nprint(a + b);',
       expectedKeyword: '30',
     ),
@@ -185,7 +185,7 @@ class _HomeScreenState extends State<HomeScreen> {
       textDirection: isAr ? TextDirection.rtl : TextDirection.ltr,
       child: Scaffold(
         appBar: AppBar(
-          title: Text(isAr ? 'Dart Master' : 'Dart Master'),
+          title: const Text('Dart Master'),
           actions: [
             TextButton(
               onPressed: widget.onToggleLanguage,
@@ -332,16 +332,17 @@ class _LessonDetailScreenState extends State<LessonDetailScreen> {
   void _verifyLesson() {
     final code = _codeController.text.trim();
     bool isAr = widget.language == 'ar';
+    final result = DartInterpreter.evaluate(code, isAr);
 
-    if (code.contains(widget.lesson.expectedKeyword)) {
+    if (result.isSuccess && result.output.contains(widget.lesson.expectedKeyword)) {
       setState(() {
-        _output = isAr ? 'إجابة صحيحة! أحسنت 🎯 (+15 نقطة)' : 'Correct Answer! Well done 🎯 (+15 pts)';
+        _output = '${result.output}\n${isAr ? "إجابة صحيحة! أحسنت 🎯 (+15 نقطة)" : "Correct Answer! Well done 🎯 (+15 pts)"}';
         _isSuccess = true;
       });
       _addScore(15);
     } else {
       setState(() {
-        _output = isAr ? 'حاول مرة أخرى، الكود لم يحقق المطلوب.' : 'Try again, code output does not match.';
+        _output = result.output;
         _isSuccess = false;
       });
     }
@@ -448,25 +449,15 @@ class _CodeRunnerScreenState extends State<CodeRunnerScreen> {
       return;
     }
 
-    final printRegex = RegExp(r"^print\s*\(\s*(['" r'"])(.*?)\1\s*\)\s*;?$');
-    if (printRegex.hasMatch(code)) {
-      final match = printRegex.firstMatch(code);
-      final printedText = match?.group(2) ?? '';
+    final result = DartInterpreter.evaluate(code, isAr);
+    setState(() {
+      _output = result.output;
+      _isSuccess = result.isSuccess;
+    });
 
-      setState(() {
-        _output = printedText.isEmpty ? '(Empty output)' : printedText;
-        _isSuccess = true;
-      });
-
-      if (!_executedCodes.contains(code) && printedText.isNotEmpty) {
-        _executedCodes.add(code);
-        _addScore(10);
-      }
-    } else {
-      setState(() {
-        _output = isAr ? 'خطأ في القواعد: استخدم الشكل الصحيح print("نص");' : 'Syntax Error: Use print("text"); format';
-        _isSuccess = false;
-      });
+    if (result.isSuccess && !_executedCodes.contains(code)) {
+      _executedCodes.add(code);
+      _addScore(10);
     }
   }
 
@@ -495,7 +486,7 @@ class _CodeRunnerScreenState extends State<CodeRunnerScreen> {
               expands: true,
               style: const TextStyle(fontFamily: 'monospace', fontSize: 16),
               decoration: InputDecoration(
-                hintText: isAr ? 'اكتب كود Dart هنا...\nمثال: print("Hello World");' : 'Write Dart code here...\nExample: print("Hello World");',
+                hintText: isAr ? 'اكتب كود Dart هنا...\nمثال:\nvar a = 10;\nvar b = 20;\nprint(a + b);' : 'Write Dart code here...\nExample:\nvar a = 10;\nvar b = 20;\nprint(a + b);',
                 border: const OutlineInputBorder(),
               ),
             ),
@@ -528,5 +519,92 @@ class _CodeRunnerScreenState extends State<CodeRunnerScreen> {
         ],
       ),
     );
+  }
+}
+
+class InterpreterResult {
+  final String output;
+  final bool isSuccess;
+  InterpreterResult(this.output, this.isSuccess);
+}
+
+class DartInterpreter {
+  static InterpreterResult evaluate(String code, bool isAr) {
+    Map<String, dynamic> variables = {};
+    List<String> outputs = [];
+    List<String> lines = code.split('\n');
+
+    for (String rawLine in lines) {
+      String line = rawLine.trim();
+      if (line.isEmpty) continue;
+
+      // التعامل مع تعريف المتغيرات var x = value;
+      if (line.startsWith('var ')) {
+        var parts = line.substring(4).split('=');
+        if (parts.length != 2 || !line.endsWith(';')) {
+          return InterpreterResult(
+            isAr ? 'خطأ في تعريف المتغير: تأكد من وجود إشارة = ونقطة فاصلة ;' : 'Syntax Error in variable assignment: Ensure = and ; are used.',
+            false,
+          );
+        }
+        String varName = parts[0].trim();
+        String varValueStr = parts[1].replaceAll(';', '').trim();
+
+        if (varValueStr.startsWith('"') && varValueStr.endsWith('"')) {
+          variables[varName] = varValueStr.substring(1, varValueStr.length - 1);
+        } else if (varValueStr.startsWith("'") && varValueStr.endsWith("'")) {
+          variables[varName] = varValueStr.substring(1, varValueStr.length - 1);
+        } else if (int.tryParse(varValueStr) != null) {
+          variables[varName] = int.parse(varValueStr);
+        } else if (double.tryParse(varValueStr) != null) {
+          variables[varName] = double.parse(varValueStr);
+        } else {
+          variables[varName] = varValueStr;
+        }
+      }
+      // التعامل مع print(...)
+      else if (line.startsWith('print(') && line.endsWith(');')) {
+        String content = line.substring(6, line.length - 2).trim();
+
+        // طباعة نص مباشر
+        if ((content.startsWith('"') && content.endsWith('"')) || (content.startsWith("'") && content.endsWith("'"))) {
+          outputs.add(content.substring(1, content.length - 1));
+        }
+        // طباعة متغير مباشر
+        else if (variables.containsKey(content)) {
+          outputs.add(variables[content].toString());
+        }
+        // جمع رقمين أو متغيرين
+        else if (content.contains('+')) {
+          var parts = content.split('+');
+          dynamic val1 = _parseVal(parts[0].trim(), variables);
+          dynamic val2 = _parseVal(parts[1].trim(), variables);
+          if (val1 != null && val2 != null) {
+            outputs.add((val1 + val2).toString());
+          } else {
+            return InterpreterResult(isAr ? 'خطأ: متغير غير معروف' : 'Error: Unknown variable in math operation', false);
+          }
+        } else {
+          outputs.add(content);
+        }
+      } else {
+        return InterpreterResult(
+          isAr ? 'خطأ في السطر: $line\nتأكد من صيغة الكتابة ووجود الفاصلة المنقوطة ;' : 'Syntax Error in line: $line\nEnsure correct format and semicolon ;',
+          false,
+        );
+      }
+    }
+
+    if (outputs.isEmpty) {
+      return InterpreterResult(isAr ? 'تم التنفيذ بنجاح (لا توجد مخرجات print)' : 'Executed successfully (No print output)', true);
+    }
+
+    return InterpreterResult(outputs.join('\n'), true);
+  }
+
+  static dynamic _parseVal(String str, Map<String, dynamic> vars) {
+    if (vars.containsKey(str)) return vars[str];
+    if (num.tryParse(str) != null) return num.parse(str);
+    return null;
   }
 }
